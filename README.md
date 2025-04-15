@@ -1,6 +1,6 @@
 # Kanban Task & Time Tracker
 
-A responsive Kanban-style task and time tracker with multiple timers and JSON file storage. Optimized for GitHub Pages.
+A responsive Kanban-style task and time tracker with multiple timers and JSON file storage.
 
 ## Features
 
@@ -41,7 +41,3 @@ If you want to run this project locally with server-side storage:
 
 - **GitHub Pages**: Uses browser localStorage for data persistence
 - **Local Development**: Uses a JSON file (kanban-data.json) on the server
-
-## Created by
-
-terminaldz
