@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Kanban Task & Time Tracker (Real-time Totals)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+        font-family: "Inter", sans-serif;
+      }
+      .dragging {
+        opacity: 0.5;
+        border: 2px dashed #cbd5e1;
+      }
+      .drag-over {
+        background-color: #e2e8f0;
+        border: 2px dashed #94a3b8;
+      }
+      .kanban-column .kanban-list::-webkit-scrollbar {
+        width: 8px;
+      }
+      .kanban-column .kanban-list::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+      }
+      .kanban-column .kanban-list::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+      .kanban-column .kanban-list::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      .delete-item {
+        cursor: pointer;
+        color: #ef4444;
+        transition: color 0.2s;
+        flex-shrink: 0;
+      }
+      .delete-item:hover {
+        color: #b91c1c;
+      }
+      .info-item {
+        cursor: pointer;
+        color: #3b82f6;
+        transition: color 0.2s;
+        flex-shrink: 0;
+        margin-left: 0.5rem;
+        font-weight: bold;
+      }
+      .info-item:hover {
+        color: #1d4ed8;
+      }
+      .item-icon {
+        margin-right: 0.5rem;
+        flex-shrink: 0;
+        transition: color 0.3s ease;
+      }
+      .icon-todo svg {
+        color: #6b7280;
+      }
+      .icon-inprogress svg {
+        color: #a855f7;
+      }
+      .icon-done svg {
+        color: #22c55e;
+      }
+      .item-card[data-item-type="task"] {
+        cursor: pointer;
+      }
+      .item-card[data-item-type="subtask"] {
+        cursor: grab;
+      }
+      .project-card {
+        cursor: pointer;
+      }
+      .time-display {
+        font-size: 0.8em;
+        color: #4b5563;
+        margin-top: 0.25rem;
+      }
+      .aggregated-time {
+        font-size: 0.9em;
+        font-weight: 500;
+        color: #1d4ed8;
+        margin-top: 0.5rem;
+      }
+      .inprogress-time {
+        font-size: 0.8em;
+        color: #a855f7;
+        margin-top: 0.25rem;
+      }
+      .timer-active-indicator {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        background-color: #f87171;
+        border-radius: 50%;
+        margin-left: 0.5rem;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      #projectGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+        padding: 1rem;
+      }
+      #kanbanView {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        flex-grow: 1;
+        overflow: hidden;
+      }
+      .hidden {
+        display: none !important;
+      }
+      #breadcrumbs {
+        margin-bottom: 1rem;
+        font-size: 0.9em;
+        color: #4b5563;
+        padding-left: 0.25rem;
+      }
+      #breadcrumbs a {
+        color: #3b82f6;
+        text-decoration: none;
+      }
+      #breadcrumbs a:hover {
+        text-decoration: underline;
+      }
+      #breadcrumbs span {
+        margin: 0 0.5rem;
+      }
+      #infoModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+      #infoModalContent {
+        background-color: white;
+        padding: 2rem;
+        border-radius: 0.5rem;
+        max-width: 90%;
+        width: 400px;
+        max-height: 80%;
+        overflow-y: auto;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      #infoModal h2 {
+        font-size: 1.25rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        color: #1f2937;
+      }
+      #infoModal ul {
+        list-style: disc;
+        margin-left: 1.5rem;
+        color: #4b5563;
+      }
+      #infoModal li {
+        margin-bottom: 0.5rem;
+      }
+      #infoModal button {
+        margin-top: 1.5rem;
+        padding: 0.5rem 1rem;
+        background-color: #6b7280;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      #infoModal button:hover {
+        background-color: #4b5563;
+      }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body
+    class="bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 flex flex-col h-screen p-4 md:p-6"
+  >
+    <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800 mb-4">
+      Task & Time Tracker
+    </h1>
+
+    <div
+      id="projectCreationArea"
+      class="mb-4 flex flex-wrap justify-center items-center gap-2"
+    >
+      <input
+        type="text"
+        id="newProjectName"
+        placeholder="New project name..."
+        class="p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+      />
+      <button
+        id="addProjectBtn"
+        class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow"
+      >
+        Add Project
+      </button>
+    </div>
+
+    <div
+      id="itemCreationArea"
+      class="mb-4 flex justify-center items-center gap-2 hidden"
+    >
+      <input
+        type="text"
+        id="newItemInput"
+        placeholder="Enter new item..."
+        class="flex-grow max-w-md p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        id="addItemBtn"
+        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-lg shadow"
+      >
+        Add Item
+      </button>
+    </div>
+
+    <div id="breadcrumbs" class="px-1"></div>
+
+    <div id="projectGrid" class=""></div>
+
+    <div id="kanbanView" class="hidden">
+      <div
+        id="todo"
+        class="kanban-column bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-4 flex flex-col overflow-hidden"
+      >
+        <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
+          To Do
+        </h2>
+        <div
+          class="kanban-list flex-grow overflow-y-auto space-y-3 p-1"
+          data-column-id="todo"
+        ></div>
+      </div>
+      <div
+        id="inprogress"
+        class="kanban-column bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-4 flex flex-col overflow-hidden"
+      >
+        <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
+          In Progress
+        </h2>
+        <div
+          class="kanban-list flex-grow overflow-y-auto space-y-3 p-1"
+          data-column-id="inprogress"
+        ></div>
+      </div>
+      <div
+        id="done"
+        class="kanban-column bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-4 flex flex-col overflow-hidden"
+      >
+        <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">
+          Done
+        </h2>
+        <div
+          class="kanban-list flex-grow overflow-y-auto space-y-3 p-1"
+          data-column-id="done"
+        ></div>
+      </div>
+    </div>
+
+    <div id="infoModal" class="hidden">
+      <div id="infoModalContent">
+        <h2 id="infoModalTitle">Information</h2>
+        <ul id="infoModalList"></ul>
+        <button id="infoModalCloseBtn">Close</button>
+      </div>
+    </div>
+
+    <canvas
+      id="confettiCanvas"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 9999;
+      "
+    ></canvas>
+
+    <script>
+      const projectGrid = document.getElementById("projectGrid");
+      const kanbanView = document.getElementById("kanbanView");
+      const breadcrumbs = document.getElementById("breadcrumbs");
+      const projectCreationArea = document.getElementById(
+        "projectCreationArea"
+      );
+      const itemCreationArea = document.getElementById("itemCreationArea");
+      const newProjectNameInput = document.getElementById("newProjectName");
+      const addProjectBtn = document.getElementById("addProjectBtn");
+      const newItemInput = document.getElementById("newItemInput");
+      const addItemBtn = document.getElementById("addItemBtn");
+      const kanbanLists = document.querySelectorAll(".kanban-list");
+      const confettiCanvas = document.getElementById("confettiCanvas");
+      const infoModal = document.getElementById("infoModal");
+      const infoModalTitle = document.getElementById("infoModalTitle");
+      const infoModalList = document.getElementById("infoModalList");
+      const infoModalCloseBtn = document.getElementById("infoModalCloseBtn");
+
+      const myConfetti = confetti.create(confettiCanvas, {
+        resize: true,
+        useWorker: true,
+      });
+
+      let projects = [];
+      let currentView = "projects";
+      let selectedProjectId = null;
+      let selectedTaskId = null;
+      let draggedItemElement = null;
+      let draggedItemId = null;
+      let draggedItemType = null;
+      let activeIntervals = {};
+      let uiUpdateInterval = null;
+
+      const statusIcons = {
+        todo: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>`,
+        inprogress: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clip-rule="evenodd" /></svg>`,
+        done: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.06-1.06L11.25 12.94l-1.72-1.72a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l3.75-3.75Z" clip-rule="evenodd" /></svg>`,
+      };
+
+      function generateId(prefix) {
+        return `${prefix}-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+      }
+      function formatTime(ms) {
+        if (ms < 0 || isNaN(ms)) ms = 0;
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return `${hours.toString().padStart(2, "0")}:${minutes
+          .toString()
+          .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+
+      function findProject(projectId) {
+        return projects.find((p) => p.id === projectId);
+      }
+      function findTask(taskId) {
+        for (const p of projects) {
+          const task = p.tasks.find((t) => t.id === taskId);
+          if (task) return task;
+        }
+        return null;
+      }
+      function findSubtask(subtaskId) {
+        for (const p of projects) {
+          for (const t of p.tasks) {
+            const subtask = (t.subtasks || []).find(
+              (st) => st.id === subtaskId
+            );
+            if (subtask) return subtask;
+          }
+        }
+        return null;
+      }
+      function findItem(itemId) {
+        const task = findTask(itemId);
+        if (task) return { item: task, type: "task" };
+        const subtask = findSubtask(itemId);
+        if (subtask) return { item: subtask, type: "subtask" };
+        return null;
+      }
+      function findParentTask(subtaskId) {
+        for (const p of projects) {
+          for (const t of p.tasks) {
+            if ((t.subtasks || []).some((st) => st.id === subtaskId)) return t;
+          }
+        }
+        return null;
+      }
+      function findProjectByItemId(itemId) {
+        for (const project of projects) {
+          for (const task of project.tasks) {
+            if (task.id === itemId) return project;
+            if (task.subtasks) {
+              for (const subtask of task.subtasks) {
+                if (subtask.id === itemId) return project;
+              }
+            }
+          }
+        }
+        return null;
+      }
+
+      function saveState() {
+        projects.forEach((p) => {
+          p.tasks.forEach((t) => {
+            if (!t.isTracking) delete t.startTime;
+            (t.subtasks || []).forEach((st) => {
+              if (!st.isTracking) delete st.startTime;
+            });
+          });
+        });
+        calculateAllAggregates();
+        const state = {
+          projects,
+          currentView,
+          selectedProjectId,
+          selectedTaskId,
+        };
+
+        // Send state to the server
+        fetch("/api/data", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(state),
+        })
+          .then((response) => response.json())
+          .catch((error) => {
+            console.error("Error saving state to server:", error);
+            // Fallback to localStorage (for GitHub Pages)
+            localStorage.setItem("kanbanAppState", JSON.stringify(state));
+            console.log("Data saved to localStorage as fallback");
+          });
+      }
+
+      function loadState() {
+        // Try loading state from the server
+        fetch("/api/data")
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Server API not available");
+            }
+            return response.json();
+          })
+          .then((state) => {
+            processLoadedState(state);
+          })
+          .catch((error) => {
+            console.error("Error loading state from server:", error);
+            // Fallback to localStorage (for GitHub Pages)
+            const savedState = localStorage.getItem("kanbanAppState");
+            if (savedState) {
+              try {
+                const state = JSON.parse(savedState);
+                console.log("Data loaded from localStorage as fallback");
+                processLoadedState(state);
+              } catch (parseError) {
+                console.error("Error parsing localStorage state:", parseError);
+                initializeDefaultState();
+              }
+            } else {
+              initializeDefaultState();
+            }
+          });
+      }
+
+      function processLoadedState(state) {
+        projects = state.projects || [];
+        currentView = state.currentView || "projects";
+        selectedProjectId = state.selectedProjectId;
+        selectedTaskId = state.selectedTaskId;
+
+        projects.forEach((p) => {
+          p.tasks = p.tasks || [];
+          p.tasks.forEach((t) => {
+            t.subtasks = t.subtasks || [];
+            t.timeSpent = t.timeSpent || 0;
+            t.isTracking = t.isTracking || false;
+            t.aggregatedTime = 0;
+            t.inProgressSubtaskTime = 0;
+
+            if (t.isTracking && t.status === "inprogress" && t.startTime) {
+              const elapsedSinceSave = Date.now() - t.startTime;
+              t.timeSpent += elapsedSinceSave;
+              startTimerInterval(t.id, t.startTime);
+            } else if (t.isTracking) {
+              t.isTracking = false;
+              delete t.startTime;
+            }
+
+            t.subtasks.forEach((st) => {
+              st.timeSpent = st.timeSpent || 0;
+              st.isTracking = st.isTracking || false;
+              if (st.isTracking && st.status === "inprogress" && st.startTime) {
+                const elapsedSinceSave = Date.now() - st.startTime;
+                st.timeSpent += elapsedSinceSave;
+                startTimerInterval(st.id, st.startTime);
+              } else if (st.isTracking) {
+                st.isTracking = false;
+                delete st.startTime;
+              }
+            });
+            updateParentTaskStatus(t.id);
+          });
+        });
+
+        calculateAllAggregates();
+        renderCurrentView();
+        startUiUpdateLoop();
+      }
+
+      function initializeDefaultState() {
+        console.log("Initializing default state");
+        projects = [
+          {
+            id: generateId("proj"),
+            name: "Default Project",
+            tasks: [],
+            aggregatedTime: 0,
+          },
+        ];
+        currentView = "projects";
+        calculateAllAggregates();
+        renderCurrentView();
+        startUiUpdateLoop();
+        saveState();
+      }
+
+      function updateParentTaskStatus(taskId) {
+        const task = findTask(taskId);
+        if (!task) return;
+
+        const subtasks = task.subtasks || [];
+        const oldStatus = task.status;
+        let newStatus = task.status || "todo";
+
+        if (subtasks.length > 0) {
+          const allSubsDone = subtasks.every((st) => st.status === "done");
+          const anySubsInProgress = subtasks.some(
+            (st) => st.status === "inprogress"
+          );
+          const anySubsToDo = subtasks.some((st) => st.status === "todo");
+
+          if (allSubsDone) newStatus = "done";
+          else if (anySubsInProgress || (anySubsToDo && !anySubsInProgress))
+            newStatus = anySubsInProgress ? "inprogress" : "todo";
+          else newStatus = "todo";
+        }
+
+        if (task.isTracking) newStatus = "inprogress";
+        if (newStatus === "done" && task.isTracking) stopTimer(task.id, false);
+
+        if (oldStatus !== newStatus) {
+          task.status = newStatus;
+          if (
+            currentView === "tasks" &&
+            selectedProjectId === findProjectByItemId(taskId)?.id
+          ) {
+            const taskCardElement = document.querySelector(
+              `.item-card[data-item-id="${taskId}"]`
+            );
+            if (taskCardElement) {
+              const targetColumn = document.querySelector(
+                `#${newStatus} .kanban-list`
+              );
+              if (
+                targetColumn &&
+                targetColumn !== taskCardElement.parentElement
+              ) {
+                targetColumn.appendChild(taskCardElement);
+              }
+              const iconSpan = taskCardElement.querySelector(".item-icon");
+              if (iconSpan) {
+                iconSpan.className = `item-icon icon-${newStatus}`;
+                iconSpan.innerHTML = statusIcons[newStatus] || statusIcons.todo;
+              }
+              if (newStatus === "done" && oldStatus !== "done") {
+                myConfetti({
+                  particleCount: 150,
+                  spread: 90,
+                  origin: { y: 0.6 },
+                });
+              }
+            }
+          }
+          saveState();
+        } else if (task.isTracking && task.status !== "inprogress") {
+          task.status = "inprogress";
+          if (
+            currentView === "tasks" &&
+            selectedProjectId === findProjectByItemId(taskId)?.id
+          ) {
+            renderTasks(selectedProjectId);
+          }
+          saveState();
+        }
+      }
+
+      function calculateInProgressSubtaskTime(task) {
+        let inProgressTime = 0;
+        if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach((st) => {
+            if (st.status === "inprogress") inProgressTime += st.timeSpent || 0;
+          });
+        }
+        task.inProgressSubtaskTime = inProgressTime;
+        return inProgressTime;
+      }
+      function calculateTaskAggregates(task) {
+        let doneSubtasksTime = 0;
+        if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach((st) => {
+            if (st.status === "done") doneSubtasksTime += st.timeSpent || 0;
+            if (st.timeSpent < 0 || isNaN(st.timeSpent)) st.timeSpent = 0;
+          });
+        }
+        if (task.timeSpent < 0 || isNaN(task.timeSpent)) task.timeSpent = 0;
+        task.aggregatedTime = (task.timeSpent || 0) + doneSubtasksTime;
+      }
+      function calculateProjectAggregates(project) {
+        let totalTaskTime = 0;
+        project.tasks.forEach((task) => {
+          calculateTaskAggregates(task);
+          calculateInProgressSubtaskTime(task);
+          totalTaskTime += task.aggregatedTime || 0;
+        });
+        project.aggregatedTime = totalTaskTime;
+      }
+      function calculateAllAggregates() {
+        projects.forEach((p) => calculateProjectAggregates(p));
+      }
+
+      function getLiveTaskTotalTime(task) {
+        if (!task) return 0;
+        let liveSelfTime = task.timeSpent || 0;
+        if (task.isTracking && task.startTime) {
+          liveSelfTime += Date.now() - task.startTime;
+        }
+        let doneSubtaskTime = 0;
+        if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach((st) => {
+            if (st.status === "done") doneSubtaskTime += st.timeSpent || 0;
+          });
+        }
+        return liveSelfTime + doneSubtaskTime;
+      }
+
+      function getLiveProjectTotalTime(project) {
+        if (!project || !project.tasks) return 0;
+        let total = 0;
+        project.tasks.forEach((task) => (total += getLiveTaskTotalTime(task)));
+        return total;
+      }
+
+      function getLiveInProgressSubtaskTime(task) {
+        if (!task || !task.subtasks) return 0;
+        let inProgressTime = 0;
+        task.subtasks.forEach((st) => {
+          if (st.status === "inprogress") {
+            let currentSubtaskTime = st.timeSpent || 0;
+            if (st.isTracking && st.startTime) {
+              currentSubtaskTime += Date.now() - st.startTime;
+            }
+            inProgressTime += currentSubtaskTime;
+          }
+        });
+        return inProgressTime;
+      }
+
+      function clearTimerInterval(itemId) {
+        if (activeIntervals[itemId]) {
+          clearInterval(activeIntervals[itemId]);
+          delete activeIntervals[itemId];
+        }
+      }
+
+      function startTimerInterval(itemId, startTime) {
+        clearTimerInterval(itemId);
+        const result = findItem(itemId);
+        if (!result) return;
+
+        activeIntervals[itemId] = setInterval(() => {
+          const currentResult = findItem(itemId);
+          if (
+            !currentResult ||
+            !currentResult.item.isTracking ||
+            !currentResult.item.startTime
+          ) {
+            stopTimer(itemId, false);
+            return;
+          }
+          const itemCard = document.querySelector(
+            `.item-card[data-item-id="${itemId}"]`
+          );
+          if (itemCard) {
+            const timeDisplayElement = itemCard.querySelector(".time-display");
+            if (timeDisplayElement) {
+              const elapsed = Date.now() - currentResult.item.startTime;
+              const displayTime = (currentResult.item.timeSpent || 0) + elapsed;
+              const prefix =
+                currentResult.type === "task" ? "Self Time: " : "Time Spent: ";
+              const newText = prefix + formatTime(displayTime);
+              if (timeDisplayElement.textContent !== newText) {
+                timeDisplayElement.textContent = newText;
+              }
+            }
+          }
+        }, 1000);
+      }
+
+      function startTimer(itemId) {
+        const result = findItem(itemId);
+        if (!result || result.item.isTracking) return;
+
+        result.item.isTracking = true;
+        result.item.startTime = Date.now();
+        result.item.status = "inprogress";
+        startTimerInterval(itemId, result.item.startTime);
+
+        const itemCard = document.querySelector(
+          `.item-card[data-item-id="${itemId}"]`
+        );
+        if (itemCard) {
+          const indicator = itemCard.querySelector(".timer-active-indicator");
+          if (indicator) indicator.classList.remove("hidden");
+          const iconSpan = itemCard.querySelector(".item-icon");
+          if (iconSpan) {
+            iconSpan.className = `item-icon icon-inprogress`;
+            iconSpan.innerHTML = statusIcons.inprogress;
+          }
+          const targetColumn = document.querySelector(
+            `#inprogress .kanban-list`
+          );
+          if (targetColumn && itemCard.parentElement !== targetColumn) {
+            targetColumn.appendChild(itemCard);
+          }
+        }
+        if (result.type === "subtask") {
+          const parentTask = findParentTask(itemId);
+          if (parentTask) updateParentTaskStatus(parentTask.id);
+        }
+        saveState();
+      }
+
+      function stopTimer(itemId, shouldSave = true) {
+        clearTimerInterval(itemId);
+        const result = findItem(itemId);
+        if (result && result.item.isTracking) {
+          if (result.item.startTime) {
+            const elapsed = Date.now() - result.item.startTime;
+            result.item.timeSpent = (result.item.timeSpent || 0) + elapsed;
+          }
+          result.item.isTracking = false;
+          delete result.item.startTime;
+          const itemCard = document.querySelector(
+            `.item-card[data-item-id="${itemId}"]`
+          );
+          if (itemCard) {
+            const indicator = itemCard.querySelector(".timer-active-indicator");
+            if (indicator) indicator.classList.add("hidden");
+            const timeDisplayElement = itemCard.querySelector(".time-display");
+            if (timeDisplayElement) {
+              const prefix =
+                result.type === "task" ? "Self Time: " : "Time Spent: ";
+              timeDisplayElement.textContent =
+                prefix + formatTime(result.item.timeSpent || 0);
+            }
+          }
+          calculateAllAggregates();
+          updateLiveAggregatesUI();
+          if (result.type === "subtask") {
+            const parentTask = findParentTask(itemId);
+            if (parentTask) updateTaskInProgressDisplay(parentTask.id);
+          }
+        }
+        if (shouldSave) saveState();
+      }
+
+      function updateLiveAggregatesUI() {
+        if (currentView === "projects") {
+          projects.forEach((p) => {
+            const projectCard = projectGrid.querySelector(
+              `.project-card[data-project-id="${p.id}"]`
+            );
+            if (projectCard) {
+              const liveTotal = getLiveProjectTotalTime(p);
+              const aggElement = projectCard.querySelector(".aggregated-time");
+              const currentText = `Total Time: ${formatTime(liveTotal)}`;
+              if (aggElement && aggElement.textContent !== currentText)
+                aggElement.textContent = currentText;
+            }
+          });
+        } else if (currentView === "tasks" && selectedProjectId) {
+          const project = findProject(selectedProjectId);
+          if (project) {
+            project.tasks.forEach((t) => {
+              const taskCard = kanbanView.querySelector(
+                `.item-card[data-item-id="${t.id}"][data-item-type="task"]`
+              );
+              if (taskCard) {
+                const liveTaskTotal = getLiveTaskTotalTime(t);
+                const aggElement = taskCard.querySelector(".aggregated-time");
+                const currentTotalText = `Total Time (Incl. Done Subs): ${formatTime(
+                  liveTaskTotal
+                )}`;
+                if (aggElement && aggElement.textContent !== currentTotalText)
+                  aggElement.textContent = currentTotalText;
+                updateTaskInProgressDisplay(t.id);
+              }
+            });
+          }
+        }
+      }
+
+      function startUiUpdateLoop() {
+        if (uiUpdateInterval) clearInterval(uiUpdateInterval);
+        uiUpdateInterval = setInterval(updateLiveAggregatesUI, 2000);
+      }
+
+      function updateTaskAggregateDisplay(taskId) {
+        if (currentView !== "tasks") return;
+        const taskCard = document.querySelector(
+          `.item-card[data-item-id="${taskId}"]`
+        );
+        if (taskCard) {
+          const task = findTask(taskId);
+          if (task) {
+            const aggTimeElement = taskCard.querySelector(".aggregated-time");
+            if (aggTimeElement)
+              aggTimeElement.textContent = `Total Time (Incl. Done Subs): ${formatTime(
+                task.aggregatedTime || 0
+              )}`;
+          }
+        }
+      }
+
+      function updateTaskInProgressDisplay(taskId) {
+        if (currentView !== "tasks") return;
+        const taskCard = document.querySelector(
+          `.item-card[data-item-id="${taskId}"]`
+        );
+        if (taskCard) {
+          const task = findTask(taskId);
+          if (task) {
+            const inProgTimeElement =
+              taskCard.querySelector(".inprogress-time");
+            if (inProgTimeElement) {
+              const liveInProgressTime = getLiveInProgressSubtaskTime(task);
+              const currentText = `In Progress Subtasks: ${formatTime(
+                liveInProgressTime
+              )}`;
+              if (inProgTimeElement.textContent !== currentText)
+                inProgTimeElement.textContent = currentText;
+            }
+          }
+        }
+      }
+
+      function updateProjectAggregateDisplay(projectId) {
+        if (currentView !== "projects") return;
+        const projectCard = document.querySelector(
+          `.project-card[data-project-id="${projectId}"]`
+        );
+        if (projectCard) {
+          const project = findProject(projectId);
+          if (project) {
+            const aggTimeElement =
+              projectCard.querySelector(".aggregated-time");
+            if (aggTimeElement)
+              aggTimeElement.textContent = `Total Time: ${formatTime(
+                project.aggregatedTime || 0
+              )}`;
+          }
+        }
+      }
+
+      function switchView(view, projId = null, taskId = null) {
+        currentView = view;
+        selectedProjectId = projId;
+        selectedTaskId = taskId;
+        renderCurrentView();
+        updateLiveAggregatesUI();
+        saveState();
+      }
+
+      function renderCurrentView() {
+        projectGrid.classList.add("hidden");
+        kanbanView.classList.add("hidden");
+        projectCreationArea.classList.add("hidden");
+        itemCreationArea.classList.add("hidden");
+        updateBreadcrumbs();
+        switch (currentView) {
+          case "projects":
+            projectGrid.classList.remove("hidden");
+            projectCreationArea.classList.remove("hidden");
+            renderProjects();
+            break;
+          case "tasks":
+            kanbanView.classList.remove("hidden");
+            itemCreationArea.classList.remove("hidden");
+            newItemInput.placeholder = "Enter new task name...";
+            renderTasks(selectedProjectId);
+            break;
+          case "subtasks":
+            kanbanView.classList.remove("hidden");
+            itemCreationArea.classList.remove("hidden");
+            newItemInput.placeholder = "Enter new subtask name...";
+            renderSubtasks(selectedTaskId);
+            break;
+        }
+        setTimeout(updateLiveAggregatesUI, 50);
+      }
+
+      function updateBreadcrumbs() {
+        breadcrumbs.innerHTML = "";
+        const homeLink = `<a href="#" onclick="event.preventDefault(); switchView('projects');">Projects</a>`;
+        breadcrumbs.insertAdjacentHTML("beforeend", homeLink);
+
+        if (currentView === "tasks" || currentView === "subtasks") {
+          if (!selectedProjectId) {
+            switchView("projects");
+            return;
+          }
+          const project = findProject(selectedProjectId);
+          if (project) {
+            breadcrumbs.insertAdjacentHTML(
+              "beforeend",
+              `<span>></span><a href="#" onclick="event.preventDefault(); switchView('tasks', '${project.id}');">${project.name}</a>`
+            );
+          } else {
+            switchView("projects");
+            return;
+          }
+        }
+        if (currentView === "subtasks") {
+          if (!selectedTaskId) {
+            if (selectedProjectId) switchView("tasks", selectedProjectId);
+            else switchView("projects");
+            return;
+          }
+          const task = findTask(selectedTaskId);
+          if (task) {
+            breadcrumbs.insertAdjacentHTML(
+              "beforeend",
+              `<span>></span><span>${task.name}</span>`
+            );
+          } else {
+            if (selectedProjectId) switchView("tasks", selectedProjectId);
+            else switchView("projects");
+            return;
+          }
+        }
+      }
+
+      function renderProjects() {
+        projectGrid.innerHTML = "";
+        calculateAllAggregates();
+        projects.forEach((project) => {
+          const card = document.createElement("div");
+          card.setAttribute("data-project-id", project.id);
+          card.className =
+            "project-card bg-white p-4 rounded-lg shadow border border-gray-200 hover:shadow-md transition-shadow";
+          card.innerHTML = `
+                     <div class="flex justify-between items-center mb-2">
+                         <h3 class="text-lg font-semibold text-gray-800 truncate" title="${
+                           project.name
+                         }">${project.name}</h3>
+                         <div class="flex items-center flex-shrink-0">
+                            <span class="info-item" title="Show In Progress Items">i</span>
+                            <span class="delete-item text-sm ml-2" title="Delete Project">×</span>
+                         </div>
+                     </div>
+                     <div class="aggregated-time">Total Time: ${formatTime(
+                       project.aggregatedTime || 0
+                     )}</div>
+                 `;
+          card.addEventListener("click", (e) => {
+            if (
+              e.target.classList.contains("info-item") ||
+              e.target.classList.contains("delete-item") ||
+              e.target.closest(".delete-item") ||
+              e.target.closest(".info-item")
+            )
+              return;
+            switchView("tasks", project.id);
+          });
+          card.querySelector(".info-item").addEventListener("click", (e) => {
+            e.stopPropagation();
+            showInProgressItemsModal(project.id);
+          });
+          card.querySelector(".delete-item").addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (
+              !confirm(
+                `Delete project "${project.name}" and all its tasks/subtasks? This cannot be undone.`
+              )
+            )
+              return;
+            const projToDelete = findProject(project.id);
+            if (projToDelete) {
+              projToDelete.tasks.forEach((task) => {
+                if (task.isTracking) stopTimer(task.id, false);
+                (task.subtasks || []).forEach((st) => {
+                  if (st.isTracking) stopTimer(st.id, false);
+                });
+              });
+            }
+            projects = projects.filter((p) => p.id !== project.id);
+            if (selectedProjectId === project.id) switchView("projects");
+            else {
+              renderProjects();
+              saveState();
+            }
+          });
+          projectGrid.appendChild(card);
+        });
+        setTimeout(updateLiveAggregatesUI, 50);
+      }
+
+      function renderTasks(projectId) {
+        kanbanLists.forEach((list) => (list.innerHTML = ""));
+        const project = findProject(projectId);
+        if (!project) {
+          switchView("projects");
+          return;
+        }
+        calculateProjectAggregates(project);
+
+        project.tasks.forEach((task) => {
+          updateParentTaskStatus(task.id);
+          const updatedTask = findTask(task.id);
+          if (!updatedTask) return;
+          const card = createTaskCardElement(updatedTask);
+          const column = document.querySelector(
+            `#${updatedTask.status} .kanban-list`
+          );
+          if (column) column.appendChild(card);
+          else {
+            document.querySelector(`#todo .kanban-list`).appendChild(card);
+            if (task.status !== "todo") {
+              task.status = "todo";
+              saveState();
+            }
+          }
+        });
+        setTimeout(updateLiveAggregatesUI, 50);
+      }
+
+      function renderSubtasks(taskId) {
+        kanbanLists.forEach((list) => (list.innerHTML = ""));
+        const task = findTask(taskId);
+        if (!task) {
+          if (selectedProjectId) switchView("tasks", selectedProjectId);
+          else switchView("projects");
+          return;
+        }
+        (task.subtasks || []).forEach((subtask) => {
+          const card = createSubtaskCardElement(subtask);
+          const column = document.querySelector(
+            `#${subtask.status} .kanban-list`
+          );
+          if (column) column.appendChild(card);
+          else {
+            document.querySelector(`#todo .kanban-list`).appendChild(card);
+            if (subtask.status !== "todo") {
+              subtask.status = "todo";
+              saveState();
+            }
+          }
+        });
+      }
+
+      function createTaskCardElement(task) {
+        const card = document.createElement("div");
+        card.className =
+          "item-card bg-white p-3 rounded-lg shadow border border-gray-200 hover:bg-gray-50 transition-colors";
+        card.setAttribute("data-item-id", task.id);
+        card.setAttribute("data-item-type", "task");
+
+        const statusIconSvg = statusIcons[task.status] || statusIcons.todo;
+        const iconColorClass = `icon-${task.status}`;
+        const initialInProgressTime = task.inProgressSubtaskTime || 0;
+        const initialAggregatedTime = task.aggregatedTime || 0;
+
+        card.innerHTML = `
+                <div class="flex justify-between items-start mb-1 gap-2">
+                    <div class="flex items-center flex-grow min-w-0">
+                        <span class="item-icon ${iconColorClass}">${statusIconSvg}</span>
+                        <span class="item-text font-medium mr-2 truncate" title="${
+                          task.name
+                        }">${task.name}</span>
+                        ${
+                          task.isTracking
+                            ? '<span class="timer-active-indicator" title="Task Timer Active"></span>'
+                            : '<span class="timer-active-indicator hidden"></span>'
+                        }
+                    </div>
+                    <div class="flex items-center flex-shrink-0">
+                         ${
+                           (task.subtasks || []).length > 0
+                             ? `<span class="info-item" title="Show In Progress Subtasks">i</span>`
+                             : ""
+                         }
+                         <span class="delete-item text-xs ml-2" title="Delete Task">×</span>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500 mb-1">Subtasks: ${
+                  (task.subtasks || []).length
+                }</div>
+                <div class="time-display">Self Time: ${formatTime(
+                  task.timeSpent || 0
+                )}</div>
+                ${
+                  (task.subtasks || []).length > 0
+                    ? `<div class="inprogress-time">In Progress Subtasks: ${formatTime(
+                        initialInProgressTime
+                      )}</div>`
+                    : ""
+                }
+                <div class="aggregated-time">Total Time (Incl. Done Subs): ${formatTime(
+                  initialAggregatedTime
+                )}</div>
+            `;
+        card.addEventListener("click", (e) => {
+          if (
+            e.target.classList.contains("delete-item") ||
+            e.target.classList.contains("info-item") ||
+            e.target.closest(".delete-item") ||
+            e.target.closest(".info-item")
+          )
+            return;
+          switchView("subtasks", selectedProjectId, task.id);
+        });
+        const infoIcon = card.querySelector(".info-item");
+        if (infoIcon) {
+          infoIcon.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showInProgressSubtasksModal(task.id);
+          });
+        }
+        card.querySelector(".delete-item").addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (
+            !confirm(
+              `Delete task "${task.name}" and ALL its subtasks? This cannot be undone.`
+            )
+          )
+            return;
+          const taskIdToDelete = task.id;
+          if (task.isTracking) stopTimer(taskIdToDelete, false);
+          (task.subtasks || []).forEach((st) => {
+            if (st.isTracking) stopTimer(st.id, false);
+          });
+          const project = findProject(selectedProjectId);
+          if (project) {
+            project.tasks = project.tasks.filter(
+              (t) => t.id !== taskIdToDelete
+            );
+            if (
+              currentView === "subtasks" &&
+              selectedTaskId === taskIdToDelete
+            ) {
+              switchView("tasks", selectedProjectId);
+            } else {
+              renderTasks(selectedProjectId);
+              saveState();
+            }
+          } else {
+            console.error("Could not find parent project to delete task from.");
+          }
+        });
+        return card;
+      }
+
+      function createSubtaskCardElement(subtask) {
+        const card = document.createElement("div");
+        card.setAttribute("draggable", true);
+        card.className =
+          "item-card bg-blue-50 p-3 rounded-lg shadow border border-blue-200 hover:bg-blue-100 transition-colors";
+        card.setAttribute("data-item-id", subtask.id);
+        card.setAttribute("data-item-type", "subtask");
+
+        const statusIconSvg = statusIcons[subtask.status] || statusIcons.todo;
+        const iconColorClass = `icon-${subtask.status}`;
+
+        card.innerHTML = `
+                 <div class="flex justify-between items-start mb-1 gap-2">
+                    <div class="flex items-center flex-grow min-w-0">
+                        <span class="item-icon ${iconColorClass}">${statusIconSvg}</span>
+                        <span class="item-text font-medium mr-2 truncate" title="${
+                          subtask.name
+                        }">${subtask.name}</span>
+                        ${
+                          subtask.isTracking
+                            ? '<span class="timer-active-indicator" title="Subtask Timer Active"></span>'
+                            : '<span class="timer-active-indicator hidden"></span>'
+                        }
+                    </div>
+                     <span class="delete-item text-xs flex-shrink-0" title="Delete Subtask">×</span>
+                 </div>
+                 <div class="time-display">Time Spent: ${formatTime(
+                   subtask.timeSpent || 0
+                 )}</div>
+             `;
+        card.querySelector(".delete-item").addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (
+            !confirm(`Delete subtask "${subtask.name}"? This cannot be undone.`)
+          )
+            return;
+          if (subtask.isTracking) stopTimer(subtask.id, false);
+          const parentTask = findParentTask(subtask.id);
+          if (parentTask) {
+            parentTask.subtasks = parentTask.subtasks.filter(
+              (st) => st.id !== subtask.id
+            );
+            updateParentTaskStatus(parentTask.id);
+            renderSubtasks(selectedTaskId);
+            saveState();
+          } else {
+            console.error("Could not find parent task to delete subtask from.");
+          }
+        });
+        card.addEventListener("dragstart", handleDragStart);
+        card.addEventListener("dragend", handleDragEnd);
+        return card;
+      }
+
+      function handleAddItem() {
+        const text = newItemInput.value.trim();
+        if (!text) {
+          alert("Item name cannot be empty.");
+          return;
+        }
+        let newItemId = null;
+
+        if (currentView === "tasks" && selectedProjectId) {
+          const project = findProject(selectedProjectId);
+          if (!project) {
+            console.error("Cannot add task: Project not found");
+            return;
+          }
+          const newTask = {
+            id: generateId("task"),
+            name: text,
+            status: "todo",
+            subtasks: [],
+            timeSpent: 0,
+            isTracking: false,
+            aggregatedTime: 0,
+            inProgressSubtaskTime: 0,
+          };
+          project.tasks.push(newTask);
+          newItemId = newTask.id;
+          renderTasks(selectedProjectId);
+        } else if (currentView === "subtasks" && selectedTaskId) {
+          const task = findTask(selectedTaskId);
+          if (!task) {
+            console.error("Cannot add subtask: Parent task not found");
+            return;
+          }
+          const newSubtask = {
+            id: generateId("sub"),
+            name: text,
+            status: "todo",
+            timeSpent: 0,
+            isTracking: false,
+          };
+          if (!task.subtasks) task.subtasks = [];
+          task.subtasks.push(newSubtask);
+          newItemId = newSubtask.id;
+          updateParentTaskStatus(task.id);
+          renderSubtasks(selectedTaskId);
+        } else {
+          console.error("Cannot add item: Invalid view or selection state.");
+          return;
+        }
+
+        if (newItemId) {
+          newItemInput.value = "";
+          saveState();
+        } else {
+          console.error("Failed to add item.");
+        }
+      }
+
+      function addProject() {
+        const projectName = newProjectNameInput.value.trim();
+        if (!projectName) {
+          alert("Project name cannot be empty.");
+          return;
+        }
+        if (
+          projects.some(
+            (p) => p.name.toLowerCase() === projectName.toLowerCase()
+          )
+        ) {
+          alert("A project with this name already exists.");
+          return;
+        }
+        const newProject = {
+          id: generateId("proj"),
+          name: projectName,
+          tasks: [],
+          aggregatedTime: 0,
+        };
+        projects.push(newProject);
+        newProjectNameInput.value = "";
+        renderProjects();
+        saveState();
+      }
+
+      function handleDragStart(e) {
+        const card = e.target.closest('.item-card[data-item-type="subtask"]');
+        if (!card) {
+          e.preventDefault();
+          return;
+        }
+        draggedItemElement = card;
+        draggedItemId = card.dataset.itemId;
+        draggedItemType = "subtask";
+        e.dataTransfer.setData("text/plain", draggedItemId);
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => {
+          if (draggedItemElement) draggedItemElement.classList.add("dragging");
+        }, 0);
+      }
+      function handleDragEnd(e) {
+        if (draggedItemElement) draggedItemElement.classList.remove("dragging");
+        draggedItemElement = null;
+        draggedItemId = null;
+        draggedItemType = null;
+        kanbanLists.forEach((list) => list.classList.remove("drag-over"));
+      }
+      function handleDragOver(e) {
+        e.preventDefault();
+        const targetList = e.target.closest(".kanban-list");
+        if (targetList && draggedItemElement && draggedItemType === "subtask") {
+          kanbanLists.forEach((list) => {
+            if (list !== targetList) list.classList.remove("drag-over");
+          });
+          targetList.classList.add("drag-over");
+          e.dataTransfer.dropEffect = "move";
+        } else {
+          e.dataTransfer.dropEffect = "none";
+        }
+      }
+      function handleDragLeave(e) {
+        const targetList = e.target.closest(".kanban-list");
+        if (targetList && !targetList.contains(e.relatedTarget)) {
+          targetList.classList.remove("drag-over");
+        }
+      }
+      function handleDrop(e) {
+        e.preventDefault();
+        const targetList = e.target.closest(".kanban-list");
+
+        if (
+          !targetList ||
+          !draggedItemId ||
+          typeof draggedItemId !== "string" ||
+          !draggedItemElement ||
+          draggedItemType !== "subtask"
+        ) {
+          kanbanLists.forEach((list) => list.classList.remove("drag-over"));
+          draggedItemElement = null;
+          draggedItemId = null;
+          draggedItemType = null;
+          return;
+        }
+
+        const targetStatus = targetList.dataset.columnId;
+        const result = findItem(draggedItemId);
+
+        if (!result || result.type !== "subtask") {
+          console.error(
+            "Dropped item not found or not a subtask:",
+            draggedItemId
+          );
+          targetList.classList.remove("drag-over");
+          return;
+        }
+
+        const subtask = result.item;
+        const sourceStatus = subtask.status;
+        const parentTask = findParentTask(subtask.id);
+
+        if (sourceStatus !== targetStatus) {
+          subtask.status = targetStatus;
+
+          if (sourceStatus === "inprogress" && targetStatus !== "inprogress")
+            stopTimer(subtask.id, false);
+          else if (
+            sourceStatus !== "inprogress" &&
+            targetStatus === "inprogress"
+          )
+            startTimer(subtask.id);
+
+          targetList.appendChild(draggedItemElement);
+          const iconSpan = draggedItemElement.querySelector(".item-icon");
+          if (iconSpan) {
+            iconSpan.className = `item-icon icon-${targetStatus}`;
+            iconSpan.innerHTML = statusIcons[targetStatus] || statusIcons.todo;
+          }
+
+          if (parentTask) updateParentTaskStatus(parentTask.id);
+
+          if (targetStatus === "done") {
+            calculateAllAggregates();
+            myConfetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+          }
+
+          updateLiveAggregatesUI();
+
+          let stateSaved =
+            sourceStatus !== "inprogress" && targetStatus === "inprogress";
+          if (parentTask) {
+            const currentParentStatus = findTask(parentTask.id)?.status;
+            if (currentParentStatus !== parentTask.status) stateSaved = true;
+          }
+          if (!stateSaved) saveState();
+        } else {
+          const dropTargetElement = e.target.closest(".item-card");
+          if (dropTargetElement && dropTargetElement !== draggedItemElement) {
+            targetList.insertBefore(draggedItemElement, dropTargetElement);
+          } else {
+            targetList.appendChild(draggedItemElement);
+          }
+        }
+        targetList.classList.remove("drag-over");
+      }
+
+      function showInfoModal(title, itemsData) {
+        infoModalTitle.textContent = title;
+        infoModalList.innerHTML = "";
+        if (!itemsData || itemsData.length === 0) {
+          infoModalList.innerHTML = "<li>None currently in progress.</li>";
+        } else {
+          itemsData.forEach((item) => {
+            const li = document.createElement("li");
+            let displayTime = item.timeSpent || 0;
+            if (item.isTracking && item.startTime) {
+              displayTime += Date.now() - item.startTime;
+            }
+            const timeInfo = `(${formatTime(displayTime)})`;
+            li.textContent = `${item.name} ${timeInfo}`;
+            infoModalList.appendChild(li);
+          });
+        }
+        infoModal.classList.remove("hidden");
+      }
+      function hideInfoModal() {
+        infoModal.classList.add("hidden");
+      }
+      function showInProgressItemsModal(projectId) {
+        const project = findProject(projectId);
+        if (!project) return;
+        const inProgressItems = [];
+        project.tasks.forEach((task) => {
+          (task.subtasks || []).forEach((st) => {
+            if (st.status === "inprogress") {
+              inProgressItems.push({
+                name: `${task.name} > ${st.name}`,
+                timeSpent: st.timeSpent,
+                isTracking: st.isTracking,
+                startTime: st.startTime,
+              });
+            }
+          });
+          if (task.status === "inprogress" && task.isTracking) {
+            if (
+              !inProgressItems.some((item) =>
+                item.name.startsWith(task.name + " >")
+              )
+            ) {
+              inProgressItems.push({
+                name: `${task.name} (Self)`,
+                timeSpent: task.timeSpent,
+                isTracking: task.isTracking,
+                startTime: task.startTime,
+              });
+            }
+          }
+        });
+        showInfoModal(
+          `In Progress Items for "${project.name}"`,
+          inProgressItems
+        );
+      }
+      function showInProgressSubtasksModal(taskId) {
+        const task = findTask(taskId);
+        if (!task) return;
+        const inProgressSubtasks = (task.subtasks || [])
+          .filter((st) => st.status === "inprogress")
+          .map((st) => ({
+            name: st.name,
+            timeSpent: st.timeSpent,
+            isTracking: st.isTracking,
+            startTime: st.startTime,
+          }));
+        showInfoModal(
+          `In Progress Subtasks for "${task.name}"`,
+          inProgressSubtasks
+        );
+      }
+
+      addProjectBtn.addEventListener("click", addProject);
+      newProjectNameInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") addProject();
+      });
+      addItemBtn.addEventListener("click", handleAddItem);
+      newItemInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") handleAddItem();
+      });
+      infoModalCloseBtn.addEventListener("click", hideInfoModal);
+      infoModal.addEventListener("click", (e) => {
+        if (e.target === infoModal) hideInfoModal();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !infoModal.classList.contains("hidden"))
+          hideInfoModal();
+      });
+      kanbanLists.forEach((list) => {
+        list.addEventListener("dragover", handleDragOver);
+        list.addEventListener("dragleave", handleDragLeave);
+        list.addEventListener("drop", handleDrop);
+      });
+
+      window.addEventListener("load", loadState);
+    </script>
+  </body>
+</html>
