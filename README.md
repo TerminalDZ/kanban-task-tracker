@@ -1,6 +1,6 @@
 # Kanban Task & Time Tracker
 
-A Kanban-style task and time tracker with multiple timers and JSON file storage.
+A responsive Kanban-style task and time tracker with multiple timers and JSON file storage. Optimized for GitHub Pages.
 
 ## Features
 
@@ -8,9 +8,20 @@ A Kanban-style task and time tracker with multiple timers and JSON file storage.
 - Drag-and-drop subtasks between columns
 - Time tracking for tasks and subtasks
 - Real-time time calculations and aggregations
-- Data persistence using a JSON file
+- Data persistence (using localStorage on GitHub Pages)
+- Works in both online and offline modes
 
-## Setup
+## Using on GitHub Pages
+
+To use this application directly from GitHub Pages:
+
+1. Access the app through its GitHub Pages URL
+2. All data will be automatically stored in your browser's localStorage
+3. The application works completely client-side when deployed on GitHub Pages
+
+## Development Setup
+
+If you want to run this project locally with server-side storage:
 
 1. Make sure you have Node.js installed (v14 or higher)
 2. Install dependencies:
@@ -26,16 +37,11 @@ A Kanban-style task and time tracker with multiple timers and JSON file storage.
    http://localhost:3000
    ```
 
-## For GitHub Pages Deployment
-
-If you're deploying to GitHub Pages:
-
-1. Push this project to a GitHub repository
-2. Go to repository Settings > Pages
-3. Select the branch to deploy from and save
-
-Note: Since GitHub Pages is a static hosting service, the server-side functionality will be limited. The application will work in read-only mode when accessed through GitHub Pages.
-
 ## Data Storage
 
-All data is stored locally in the `kanban-data.json` file. No external database is required.
+- **GitHub Pages**: Uses browser localStorage for data persistence
+- **Local Development**: Uses a JSON file (kanban-data.json) on the server
+
+## Created by
+
+terminaldz

@@ -430,52 +430,77 @@
           selectedTaskId,
         };
 
-        // Send state to the server
-        fetch("/api/data", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(state),
-        })
-          .then((response) => response.json())
-          .catch((error) => {
-            console.error("Error saving state to server:", error);
-            // Fallback to localStorage (for GitHub Pages)
-            localStorage.setItem("kanbanAppState", JSON.stringify(state));
-            console.log("Data saved to localStorage as fallback");
-          });
+        // First, try to use Node.js API if available
+        try {
+          fetch("/api/data", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(state),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error("Server API not available");
+              }
+              return response.json();
+            })
+            .catch((error) => {
+              console.warn(
+                "Using localStorage fallback for GitHub Pages:",
+                error
+              );
+              // GitHub Pages fallback - use localStorage
+              localStorage.setItem("kanbanAppState", JSON.stringify(state));
+            });
+        } catch (error) {
+          // Direct fallback - use localStorage
+          console.warn("Using localStorage directly:", error);
+          localStorage.setItem("kanbanAppState", JSON.stringify(state));
+        }
       }
 
       function loadState() {
-        // Try loading state from the server
-        fetch("/api/data")
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error("Server API not available");
-            }
-            return response.json();
-          })
-          .then((state) => {
-            processLoadedState(state);
-          })
-          .catch((error) => {
-            console.error("Error loading state from server:", error);
-            // Fallback to localStorage (for GitHub Pages)
-            const savedState = localStorage.getItem("kanbanAppState");
-            if (savedState) {
-              try {
-                const state = JSON.parse(savedState);
-                console.log("Data loaded from localStorage as fallback");
-                processLoadedState(state);
-              } catch (parseError) {
-                console.error("Error parsing localStorage state:", parseError);
-                initializeDefaultState();
+        // First, try to load from Node.js API
+        try {
+          fetch("/api/data")
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error("Server API not available");
               }
-            } else {
-              initializeDefaultState();
-            }
-          });
+              return response.json();
+            })
+            .then((state) => {
+              processLoadedState(state);
+            })
+            .catch((error) => {
+              console.warn(
+                "Using localStorage fallback for GitHub Pages:",
+                error
+              );
+              // GitHub Pages fallback - use localStorage
+              loadFromLocalStorage();
+            });
+        } catch (error) {
+          // Direct fallback - use localStorage
+          console.warn("Using localStorage directly:", error);
+          loadFromLocalStorage();
+        }
+      }
+
+      function loadFromLocalStorage() {
+        const savedState = localStorage.getItem("kanbanAppState");
+        if (savedState) {
+          try {
+            const state = JSON.parse(savedState);
+            processLoadedState(state);
+          } catch (parseError) {
+            console.error("Error parsing localStorage state:", parseError);
+            initializeDefaultState();
+          }
+        } else {
+          initializeDefaultState();
+        }
       }
 
       function processLoadedState(state) {
